@@ -1,0 +1,102 @@
+/* Design tokens + base styles shared by all views. Kept deliberately plain:
+   the demo's focus is the API usage, not a CSS framework. */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e3e6ea;
+  --text: #1c2330;
+  --text-soft: #5b6675;
+  --accent: #3451b2;
+  --accent-soft: #e8edfb;
+  --danger: #b3261e;
+  --danger-soft: #fdecea;
+  --warn-bg: #fff7e0;
+  --warn-border: #e8d49a;
+  --ok: #1b7f4d;
+  --ok-soft: #e3f4ea;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.15rem; margin: 1.75rem 0 0.75rem; }
+h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+p { margin: 0.4rem 0; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.85em; background: var(--accent-soft); padding: 0.1em 0.35em; border-radius: 4px; }
+
+.page { max-width: 1080px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+.page-intro { color: var(--text-soft); max-width: 70ch; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.muted { color: var(--text-soft); }
+.error-text { color: var(--danger); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; background: var(--surface); }
+th, td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); }
+th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--accent-soft); }
+
+/* Forms */
+label.field { display: block; margin: 0.65rem 0; }
+label.field > span { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.2rem; }
+label.field > .hint { font-weight: 400; color: var(--text-soft); display: block; font-size: 0.78rem; margin-top: 0.15rem; }
+input, select, textarea {
+  font: inherit;
+  width: 100%;
+  max-width: 26rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+input:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: var(--surface); color: var(--accent); }
+button.danger { background: var(--danger); border-color: var(--danger); }
+
+fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin: 1rem 0; }
+legend { font-weight: 600; padding: 0 0.4rem; }
+
+/* Utility layout */
+.row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+/* label.field carries a 0.65rem bottom margin — give in-row buttons the same
+   so they sit level with the inputs beside them */
+.row > button { margin-bottom: 0.65rem; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+/* Definition lists for resource fields */
+dl.props { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1.25rem; margin: 0.5rem 0; }
+dl.props dt { font-weight: 600; color: var(--text-soft); }
+dl.props dd { margin: 0; font-family: var(--mono); font-size: 0.88em; overflow-wrap: anywhere; }
