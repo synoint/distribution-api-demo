@@ -77,6 +77,34 @@ const quotaMode = ref('automatic');
 // targeting dimension across groups; no overlaps within a group) — the API
 // answers 422 with details if violated.
 const customGroups = ref([]);
+
+function redistributeGroup(group) {
+  const count = group.globalQuotas.length;
+  if (count === 0) return;
+  const total = Number(basics.limit);
+  const base = Math.floor(total / count);
+  const remainder = total - base * count;
+  group.globalQuotas.forEach((q, i) => {
+    q.limit = i === 0 ? base + remainder : base;
+  });
+}
+
+function groupSum(group) {
+  return group.globalQuotas.reduce((s, q) => s + Number(q.limit || 0), 0);
+}
+
+const quotasValid = computed(() => {
+  if (quotaMode.value !== 'custom') return true;
+  const total = Number(basics.limit);
+  return customGroups.value.every(
+    (g) => g.globalQuotas.length > 0 && groupSum(g) === total && g.globalQuotas.every((q) => Number(q.limit) >= 1),
+  );
+});
+
+watch(() => basics.limit, () => {
+  customGroups.value.forEach(redistributeGroup);
+});
+
 function addGroup() {
   customGroups.value.push({ name: `Group ${customGroups.value.length + 1}`, globalQuotas: [] });
 }
@@ -84,10 +112,12 @@ function removeGroup(index) {
   customGroups.value.splice(index, 1);
 }
 function addQuota(group) {
-  group.globalQuotas.push({ name: '', limit: Number(basics.limit), gender: null, ageFrom: null, ageTo: null, regionIds: [] });
+  group.globalQuotas.push({ name: '', limit: 1, gender: null, ageFrom: null, ageTo: null, regionIds: [] });
+  redistributeGroup(group);
 }
 function removeQuota(group, index) {
   group.globalQuotas.splice(index, 1);
+  redistributeGroup(group);
 }
 function cleanQuota(quota) {
   const out = { name: quota.name, limit: Number(quota.limit) };
@@ -309,9 +339,17 @@ async function submit() {
 
       <template v-if="quotaMode === 'custom'">
         <fieldset v-for="(group, gi) in customGroups" :key="gi">
-          <legend>
+          <legend class="group-legend">
             <input v-model="group.name" placeholder="Group name" style="max-width: 16rem" />
+            <span
+              v-if="group.globalQuotas.length > 0"
+              class="quota-sum-badge"
+              :class="groupSum(group) === Number(basics.limit) ? 'sum-ok' : groupSum(group) > Number(basics.limit) ? 'sum-over' : 'sum-under'"
+            >{{ groupSum(group) }} / {{ basics.limit }}</span>
           </legend>
+          <p v-if="group.globalQuotas.length > 0 && groupSum(group) !== Number(basics.limit)" class="error-text" style="margin: 0 0 0.5rem">
+            Limits must sum to {{ basics.limit }} (currently {{ groupSum(group) }})
+          </p>
           <div v-for="(quota, qi) in group.globalQuotas" :key="qi" class="quota-item">
             <div class="form-grid quota-grid">
               <label class="field"><span>Name</span><input v-model="quota.name" /></label>
@@ -353,7 +391,7 @@ async function submit() {
 
       <div class="row" style="margin-top: 1rem">
         <button class="secondary" @click="step = 2">Back</button>
-        <button @click="step = 4">Next: Providers</button>
+        <button :disabled="!quotasValid" @click="step = 4">Next: Providers</button>
       </div>
     </div>
 
@@ -499,6 +537,20 @@ async function submit() {
   gap: 0.6rem;
   margin-top: 1rem;
 }
+
+.group-legend { display: flex; align-items: center; gap: 0.6rem; }
+.quota-sum-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.sum-ok    { background: var(--ok-soft);   color: var(--ok);   border-color: var(--ok-soft); }
+.sum-under { background: var(--warn-soft, #fff8e1); color: var(--warn, #b45309); border-color: currentColor; }
+.sum-over  { background: var(--error-soft, #fef2f2); color: var(--error, #b91c1c); border-color: currentColor; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
 .chip {
