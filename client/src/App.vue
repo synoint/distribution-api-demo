@@ -15,11 +15,6 @@
     </div>
   </header>
 
-  <div class="warning-banner">
-    ⚠ This demo talks to the <strong>production</strong> Distribution API — launching a survey
-    (status → Live) starts real, billable fieldwork.
-  </div>
-
   <main>
     <RouterView />
   </main>
@@ -57,11 +52,4 @@ nav a {
 }
 nav a.router-link-active { color: var(--accent); border-bottom-color: var(--accent); }
 
-.warning-banner {
-  background: var(--warn-bg);
-  border-bottom: 1px solid var(--warn-border);
-  text-align: center;
-  font-size: 0.85rem;
-  padding: 0.4rem 1rem;
-}
 </style>
