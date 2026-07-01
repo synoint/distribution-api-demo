@@ -46,6 +46,24 @@ describe('project (sample) routes', () => {
   });
 });
 
+describe('project status collection routes', () => {
+  it('proxies closed and archived endpoints and forwards page param', async () => {
+    const { app, api } = appWith();
+
+    await request(app).get('/api/samples/closed').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/samples/closed', { query: { page: undefined } });
+
+    await request(app).get('/api/samples/closed?page=2').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/samples/closed', { query: { page: '2' } });
+
+    await request(app).get('/api/samples/archived').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/samples/archived', { query: { page: undefined } });
+
+    await request(app).get('/api/samples/archived?page=3').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/samples/archived', { query: { page: '3' } });
+  });
+});
+
 describe('survey (subset) routes', () => {
   it('lists, creates (201), reads, modifies and changes limits', async () => {
     const { app, api } = appWith();

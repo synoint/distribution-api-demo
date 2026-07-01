@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { api } from '@/api';
 import { useAsync } from '@/composables/useAsync';
 import EndpointBadge from '@/components/EndpointBadge.vue';
@@ -10,6 +10,8 @@ import JsonPreview from '@/components/JsonPreview.vue';
 
 const props = defineProps({ sampleId: { type: String, required: true } });
 const router = useRouter();
+const route = useRoute();
+const isReadOnly = route.query.source === 'closed' || route.query.source === 'archived';
 
 // GET /samples/{id} — note: its `subsets` field contains IRI strings
 // ("/samples/{id}/subsets/{sid}"), not embedded objects…
@@ -55,6 +57,12 @@ const surveys = computed(() => surveyList.data.value?.subsets ?? []);
       <EndpointBadge method="GET" path="/samples/{id}" />
       <EndpointBadge method="PATCH" path="/samples/{id}" />
 
+      <div v-if="isReadOnly" class="warn-banner">
+        This project is <strong>{{ route.query.source }}</strong> —
+        <code>PATCH /samples/{id}</code> returns <code>409 Conflict</code> for any non-active sample.
+        Submit the form below to see the rejection live.
+      </div>
+
       <div class="card">
         <h2 style="margin-top: 0">Project settings</h2>
         <p class="muted">
@@ -78,7 +86,7 @@ const surveys = computed(() => surveyList.data.value?.subsets ?? []);
 
       <div class="spread">
         <h2>Surveys <span class="muted">(subsets)</span></h2>
-        <button @click="router.push({ name: 'survey-create', params: { sampleId } })">New survey</button>
+        <button :disabled="isReadOnly" @click="router.push({ name: 'survey-create', params: { sampleId } })">New survey</button>
       </div>
       <EndpointBadge method="GET" path="/samples/{id}/subsets" />
       <p v-if="surveyList.loading.value" class="muted">Loading surveys…</p>
@@ -114,3 +122,14 @@ const surveys = computed(() => surveyList.data.value?.subsets ?? []);
     </template>
   </div>
 </template>
+
+<style scoped>
+.warn-banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  font-size: 0.92rem;
+}
+</style>
