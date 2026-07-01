@@ -102,7 +102,51 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">4 · Survey link &amp; GUID</h2>
+      <h2 style="margin-top: 0">4 · Project lifecycle</h2>
+      <p>
+        Once fieldwork ends, a project (sample) moves through two further states. Each has a
+        dedicated read endpoint that returns only that cohort:
+      </p>
+      <table>
+        <thead>
+          <tr><th>State</th><th>Endpoint</th><th>Meaning</th><th>Statistics</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Closed</strong></td>
+            <td><EndpointBadge method="GET" path="/samples/closed" /></td>
+            <td>All surveys closed; invoicing started. No further edits.</td>
+            <td>Live (real-time)</td>
+          </tr>
+          <tr>
+            <td><strong>Archived</strong></td>
+            <td><EndpointBadge method="GET" path="/samples/archived" /></td>
+            <td>Fully archived historical record.</td>
+            <td>Snapshot (frozen at archive time)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The closed and archived endpoints are <strong>paginated</strong> (15 per page). Pass
+        <code>?page=N</code> and read the <code>meta</code> key in the response:
+      </p>
+      <pre v-pre><code>GET /samples/closed?page=2
+{ "samples": [...], "meta": { "total": 42, "page": 2, "perPage": 15, "pages": 3 } }</code></pre>
+      <p>
+        <code>PATCH /samples/{id}</code> returns <strong>409 Conflict</strong> for any non-active
+        sample — the API enforces immutability once a project is closed. The
+        <RouterLink to="/">Projects</RouterLink> page demonstrates this live: open a Closed project
+        and submit the edit form to see the rejection.
+      </p>
+      <p class="muted">
+        The response includes <code>closedAt</code> (closed and archived) and
+        <code>archivedAt</code> (archived only) — timestamp fields not present on the general
+        <code>GET /samples</code> collection.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top: 0">5 · Survey link &amp; GUID</h2>
       <p>
         Your survey's <code>url</code> and <code>testUrl</code> must contain the literal placeholder
         <code>{{ constants?.surveyUrlIdPlaceholder ?? '[ID]' }}</code>. For each panelist entering,
@@ -116,7 +160,7 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">5 · Redirects (your survey → Syno)</h2>
+      <h2 style="margin-top: 0">6 · Redirects (your survey → Syno)</h2>
       <p>
         When a respondent finishes — whatever the outcome — your survey must redirect them back to
         Syno. This registers the attempt, drives respondent remuneration and your invoicing.
@@ -134,7 +178,7 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">6 · Survey lifecycle</h2>
+      <h2 style="margin-top: 0">7 · Survey lifecycle</h2>
       <p class="muted">
         Status names below come live from <code>GET /reference/statuses</code>.
       </p>
@@ -153,7 +197,7 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">7 · Quotas</h2>
+      <h2 style="margin-top: 0">8 · Quotas</h2>
       <p>
         A quota targets quantity (limit) by gender, age range, regions and profiling answers.
         Two modes when creating a survey:
@@ -188,7 +232,7 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">8 · Providers &amp; costs</h2>
+      <h2 style="margin-top: 0">9 · Providers &amp; costs</h2>
       <p>
         Providers are sample marketplaces differing in country coverage and pricing. Allocate the
         survey limit across them with percentages totalling 100; optionally narrow fieldwork to
@@ -204,7 +248,7 @@ const constants = useConstants();
     </div>
 
     <div class="card">
-      <h2 style="margin-top: 0">9 · Errors</h2>
+      <h2 style="margin-top: 0">10 · Errors</h2>
       <p>
         The API is a standard JSON REST API: errors come back as JSON with the appropriate HTTP
         status code. Validation failures (422) include a <code>detail</code> message and a

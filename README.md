@@ -73,7 +73,7 @@ Demo routes mirror the upstream Distribution API 1:1 (same path under `/api`):
 | Area | Endpoints |
 |---|---|
 | Reference data | `GET /reference/countries[/{id}]` · `languages[/{id}]` · `genders[/{id}]` · `statuses[/{id}]` · `providers[/{id}]` · `providers/{id}/countries[/{cid}/languages]` · `panels?country=` · `questions?countryId=` |
-| Projects (samples) | `GET\|POST /samples` · `GET\|PATCH /samples/{id}` · `GET /samples/{id}/statistics` |
+| Projects (samples) | `GET\|POST /samples` · `GET /samples/closed[?page=N]` · `GET /samples/archived[?page=N]` · `GET\|PATCH /samples/{id}` · `GET /samples/{id}/statistics` |
 | Surveys (subsets) | `GET\|POST /samples/{id}/subsets` · `GET\|PATCH /samples/{id}/subsets/{sid}` · `PATCH …/{sid}/status` (3 Live · 4 Paused · 6 Closed) · `PATCH …/{sid}/limit` (per-quota limits; full structure required; each group must sum to the survey limit) |
 | Providers | `GET\|POST /subsets/{id}/providers` · `GET /subsets/{id}/providers/{pid}` |
 | Quotas (read) | `GET /subsets/{id}/global-quota-groups[/{gid}]` · `GET /global-quota-groups/{gid}/global-quotas[/{qid}]` · `GET /global-quotas/{qid}/statistics` |
@@ -81,7 +81,7 @@ Demo routes mirror the upstream Distribution API 1:1 (same path under `/api`):
 | Monitoring | `GET /subsets/{id}/statistics` · `GET /subsets/{id}/feasibility` |
 | Demo-only | `GET /api/health` · `GET /api/meta/constants` |
 
-Behaviors worth knowing (verified against the live API): `feasibility` and `responses` may answer **500** for draft surveys that were never launched; the subset-providers collection key is **`subsetProviders`**; `GET /samples/{id}` returns `subsets` as IRI strings (use `GET /samples/{id}/subsets` for objects); the questions collection key is **`profilingQuestions`** (answers carry `label`); `PATCH …/limit` without `globalQuotaGroups` returns 422 "Quota groups are required"; **Closed surveys reject limit/provider/modify changes with 409**. **Test accounts**: panel filters are skipped (always the dedicated test panel), the provider list contains only the test provider, and non-test providers in a survey payload are silently skipped on creation.
+Behaviors worth knowing (verified against the live API): `feasibility` and `responses` may answer **500** for draft surveys that were never launched; the subset-providers collection key is **`subsetProviders`**; `GET /samples/{id}` returns `subsets` as IRI strings (use `GET /samples/{id}/subsets` for objects); the questions collection key is **`profilingQuestions`** (answers carry `label`); `PATCH …/limit` without `globalQuotaGroups` returns 422 "Quota groups are required"; **Closed surveys reject limit/provider/modify changes with 409**. **`PATCH /samples/{id}` returns 409** when the sample itself is not active (closed or archived). **`GET /samples/closed` and `GET /samples/archived`** return a `meta` envelope `{total, page, perPage, pages}` alongside `samples` (15 per page); pass `?page=N` to paginate. **Test accounts**: panel filters are skipped (always the dedicated test panel), the provider list contains only the test provider, and non-test providers in a survey payload are silently skipped on creation.
 
 ## How to read this codebase
 

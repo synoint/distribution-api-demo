@@ -6,3 +6,7 @@ server/.env
 
 # Internal-only material — never ship with the demo
 internal/
+
+# Superpowers planning artifacts
+docs/superpowers/
+.superpowers/
