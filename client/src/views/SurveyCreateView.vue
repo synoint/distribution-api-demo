@@ -23,7 +23,7 @@ const STEPS = ['Basics', 'Targeting', 'Quotas', 'Providers', 'Review & create'];
 
 /* ---------- Step 1: Basics ---------- */
 const basics = reactive({
-  name: 'Germany — CPI test',
+  name: '',
   limit: 10,
   fieldPeriod: 5,
   loi: 10,
@@ -208,9 +208,9 @@ async function submit() {
     <div v-show="step === 1" class="card">
       <h2 style="margin-top: 0">Survey basics</h2>
       <div class="form-grid">
-        <label class="field"><span>Survey name *</span>
+        <label class="field"><span>Global Quota name *</span>
           <input v-model="basics.name" required maxlength="255" />
-          <span class="hint">Mandatory and unique within the project — shown wherever the global quota is referenced.</span>
+          <span class="hint">Mandatory and unique within the project.</span>
         </label>
         <label class="field"><span>Limit (completes wanted)</span>
           <input v-model="basics.limit" type="number" min="1" />
@@ -239,7 +239,7 @@ async function submit() {
         <input v-model="basics.testUrl" maxlength="255" />
       </label>
       <p v-if="!urlsValid" class="error-text">Both URLs must contain the [ID] placeholder.</p>
-      <p v-if="!nameValid" class="error-text">A survey name is required (max 255 characters).</p>
+      <p v-if="!nameValid" class="error-text">A Global Quota name is required (max 255 characters).</p>
       <button :disabled="!urlsValid || !nameValid" @click="step = 2">Next: Targeting</button>
     </div>
 
