@@ -144,7 +144,7 @@ function openTab(next) {
 
     <template v-else-if="survey.data.value">
       <div class="spread">
-        <h1>Survey #{{ survey.data.value.id }} <span class="muted">(subset)</span></h1>
+        <h1>{{ survey.data.value.name }} <span class="muted">— survey #{{ survey.data.value.id }} (subset)</span></h1>
         <StatusBadge :status="survey.data.value.status" />
       </div>
 
@@ -162,6 +162,7 @@ function openTab(next) {
       <div v-if="tab === 'Overview'" class="card">
         <EndpointBadge method="GET" path="/samples/{sampleId}/subsets/{id}" />
         <dl class="props">
+          <dt>Name</dt><dd>{{ survey.data.value.name }}</dd>
           <dt>Limit</dt><dd>{{ survey.data.value.limit }}</dd>
           <dt>Field period</dt><dd>{{ survey.data.value.fieldPeriod }} days</dd>
           <dt>Country</dt><dd>{{ survey.data.value.countryId }}</dd>
