@@ -69,7 +69,7 @@ const constants = useConstants();
         </li>
         <li>
           <strong>Create a survey</strong> — <EndpointBadge method="POST" path="/samples/{id}/subsets" />
-          with metadata, targeting (<code>countryId</code>, <code>languageId</code>, <code>gender</code>,
+          with a mandatory <code>Global Quota name</code>, metadata, targeting (<code>countryId</code>, <code>languageId</code>, <code>gender</code>,
           ages, <code>regionIds</code>, <code>profilingIds</code>), quotas and providers.
           The survey starts in <strong>Draft</strong>.
         </li>

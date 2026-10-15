@@ -23,6 +23,7 @@ const STEPS = ['Basics', 'Targeting', 'Quotas', 'Providers', 'Review & create'];
 
 /* ---------- Step 1: Basics ---------- */
 const basics = reactive({
+  name: '',
   limit: 10,
   fieldPeriod: 5,
   loi: 10,
@@ -30,6 +31,8 @@ const basics = reactive({
   url: 'https://your-survey.example.com/start?respondent=[ID]',
   testUrl: 'https://your-survey.example.com/test?respondent=[ID]',
 });
+
+const nameValid = computed(() => basics.name.trim().length > 0 && basics.name.trim().length <= 255);
 
 // The API replaces the literal [ID] placeholder with the response GUID —
 // without it you cannot identify respondents for reconciliation.
@@ -150,6 +153,7 @@ watch(step, (next) => { if (next === 4 && targeting.countryId) panels.run(); });
 
 /* ---------- Step 5: Review & create ---------- */
 const payload = computed(() => ({
+  name: basics.name.trim(),
   limit: Number(basics.limit),
   fieldPeriod: Number(basics.fieldPeriod),
   loi: Number(basics.loi),
@@ -204,6 +208,10 @@ async function submit() {
     <div v-show="step === 1" class="card">
       <h2 style="margin-top: 0">Survey basics</h2>
       <div class="form-grid">
+        <label class="field"><span>Global Quota name *</span>
+          <input v-model="basics.name" required maxlength="255" />
+          <span class="hint">Mandatory and unique within the project.</span>
+        </label>
         <label class="field"><span>Limit (completes wanted)</span>
           <input v-model="basics.limit" type="number" min="1" />
           <span class="hint">Capped by the project limit. Never 0.</span>
@@ -231,7 +239,8 @@ async function submit() {
         <input v-model="basics.testUrl" maxlength="255" />
       </label>
       <p v-if="!urlsValid" class="error-text">Both URLs must contain the [ID] placeholder.</p>
-      <button :disabled="!urlsValid" @click="step = 2">Next: Targeting</button>
+      <p v-if="!nameValid" class="error-text">A Global Quota name is required (max 255 characters).</p>
+      <button :disabled="!urlsValid || !nameValid" @click="step = 2">Next: Targeting</button>
     </div>
 
     <!-- Step 2: Targeting -->

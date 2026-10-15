@@ -20,6 +20,7 @@ export function surveysRouter(api) {
   /**
    * POST /samples/{sampleId}/subsets — create a survey. ALL fields required:
    * {
+   *   name:         string — mandatory, unique within the project
    *   limit:        int    — completes wanted (never 0; capped by project limit)
    *   fieldPeriod:  int    — fieldwork days
    *   countryId:    int    — from /reference/countries

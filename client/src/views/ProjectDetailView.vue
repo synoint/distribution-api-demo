@@ -94,7 +94,7 @@ const surveys = computed(() => surveyList.data.value?.subsets ?? []);
       <p v-else-if="!surveys.length" class="muted">No surveys yet — create one to define targeting, quotas and providers.</p>
       <table v-else>
         <thead>
-          <tr><th>ID</th><th>Status</th><th>Limit</th><th>Country</th><th>LOI</th><th>IR</th><th>Completed</th></tr>
+          <tr><th>ID</th><th>Name</th><th>Status</th><th>Limit</th><th>Country</th><th>LOI</th><th>IR</th><th>Completed</th></tr>
         </thead>
         <tbody>
           <tr
@@ -104,6 +104,7 @@ const surveys = computed(() => surveyList.data.value?.subsets ?? []);
             @click="router.push({ name: 'survey-detail', params: { sampleId, subsetId: survey.id } })"
           >
             <td>{{ survey.id }}</td>
+            <td>{{ survey.name }}</td>
             <td><StatusBadge :status="survey.status" /></td>
             <td>{{ survey.limit }}</td>
             <td>{{ survey.countryId }}</td>
