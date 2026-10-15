@@ -57,11 +57,25 @@ const targeting = reactive({
 // regions; profiling questions are per-country too.
 const countryDetail = useAsync(() => api.get(`/reference/countries/${targeting.countryId}`));
 const questions = useAsync(() => api.get(`/reference/questions?countryId=${targeting.countryId}`));
-watch(() => targeting.countryId, (id) => {
+// GET /reference/countries/{id}/languages narrows the language list to those
+// a provider can actually field in that country, and flags the default one.
+const countryLanguages = useAsync(() => api.get(`/reference/countries/${targeting.countryId}/languages`));
+watch(() => targeting.countryId, async (id) => {
   targeting.regionIds = [];
   targeting.profilingIds = [];
-  if (id) { countryDetail.run(); questions.run(); }
+  if (!id) return;
+  countryDetail.run();
+  questions.run();
+  const { languages: available } = await countryLanguages.run();
+  if (!available.some((lang) => lang.id === targeting.languageId)) {
+    targeting.languageId = available.find((lang) => lang.isDefault)?.id ?? null;
+  }
 });
+const isoCodeByLanguage = computed(() => Object.fromEntries(
+  (languages.data.value?.languages ?? []).map((lang) => [lang.id, lang.isoCode])));
+const languageOptions = computed(() => (targeting.countryId
+  ? countryLanguages.data.value?.languages
+  : languages.data.value?.languages) ?? []);
 
 // Profiling catalogs are large, so answers are picked in a modal; the page
 // itself only shows the current selection.
@@ -137,6 +151,17 @@ const panels = useAsync(() => api.get(`/reference/panels?country=${targeting.cou
 onMounted(providerList.run);
 const providerRows = ref([{ provider: null, percentage: 100, panelIds: [] }]);
 const availableProviders = computed(() => providerList.data.value?.providers ?? []);
+// Only providers flagged `supportsPanelSelection` accept specific `panelIds`;
+// those ids are the panels' `referenceId`, not their `id`.
+const supportsPanelSelection = (providerId) =>
+  availableProviders.value.find((provider) => provider.id === providerId)?.supportsPanelSelection ?? false;
+const panelsFor = (providerId) =>
+  (panels.data.value?.panels ?? []).filter((panel) => panel.provider === providerId);
+watch(() => providerRows.value.map((row) => row.provider), () => {
+  for (const row of providerRows.value) {
+    if (!supportsPanelSelection(row.provider)) row.panelIds = [];
+  }
+});
 // One row per supply source at most — with a single available provider
 // (e.g. test accounts) there is nothing to split, so no extra rows.
 const canAddProviderRow = computed(() => providerRows.value.length < availableProviders.value.length);
@@ -146,8 +171,12 @@ function addProviderRow() {
 function removeProviderRow(index) {
   providerRows.value.splice(index, 1);
 }
+const selectedProviderRows = computed(() => providerRows.value.filter((row) => row.provider));
 const percentageTotal = computed(() =>
-  providerRows.value.reduce((sum, row) => sum + Number(row.percentage || 0), 0));
+  selectedProviderRows.value.reduce((sum, row) => sum + Number(row.percentage || 0), 0));
+// Providers are optional: with none selected, defaults are assigned at launch.
+const providersValid = computed(() =>
+  !selectedProviderRows.value.length || percentageTotal.value === 100);
 
 watch(step, (next) => { if (next === 4 && targeting.countryId) panels.run(); });
 
@@ -248,6 +277,7 @@ async function submit() {
       <h2 style="margin-top: 0">Targeting</h2>
       <EndpointBadge method="GET" path="/reference/countries" />
       <EndpointBadge method="GET" path="/reference/countries/{id}" />
+      <EndpointBadge method="GET" path="/reference/countries/{id}/languages" />
       <EndpointBadge method="GET" path="/reference/questions?countryId=…" />
       <div class="form-grid">
         <label class="field"><span>Country</span>
@@ -259,8 +289,8 @@ async function submit() {
         </label>
         <label class="field"><span>Language</span>
           <select v-model="targeting.languageId">
-            <option v-for="lang in languages.data.value?.languages ?? []" :key="lang.id" :value="lang.id">
-              {{ lang.name }} ({{ lang.isoCode }})
+            <option v-for="lang in languageOptions" :key="lang.id" :value="lang.id">
+              {{ lang.name }}{{ isoCodeByLanguage[lang.id] ? ` (${isoCodeByLanguage[lang.id]})` : '' }}{{ lang.isDefault ? ' — default' : '' }}
             </option>
           </select>
         </label>
@@ -411,15 +441,18 @@ async function submit() {
       <EndpointBadge method="GET" path="/reference/panels?country=…" />
       <p class="muted">
         Allocate the survey limit across supply sources. Percentages must total 100. Panels
-        (optional) narrow fieldwork to dedicated panelist pools.
+        (optional, only for providers that support panel selection) narrow fieldwork to dedicated
+        panelist pools. Providers are optional: leave them all empty and the API stores none now
+        and assigns default providers when the survey is launched.
       </p>
       <TestModeDisclaimer>
         for test accounts only the test provider is available — other providers in the payload are
-        silently skipped on creation (and defaults are assigned if none remain).
+        silently skipped on creation.
       </TestModeDisclaimer>
       <div v-for="(row, i) in providerRows" :key="i" class="form-grid">
         <label class="field"><span>Provider</span>
           <select v-model="row.provider">
+            <option :value="null">— none —</option>
             <option v-for="provider in providerList.data.value?.providers ?? []" :key="provider.id" :value="provider.id">
               {{ provider.name }} (id {{ provider.id }})
             </option>
@@ -428,10 +461,10 @@ async function submit() {
         <label class="field"><span>Percentage</span>
           <input v-model="row.percentage" type="number" min="1" max="100" />
         </label>
-        <label class="field"><span>Panels (optional)</span>
+        <label v-if="supportsPanelSelection(row.provider)" class="field"><span>Panels (optional)</span>
           <select v-model="row.panelIds" multiple>
-            <option v-for="panel in panels.data.value?.panels ?? []" :key="panel.id" :value="panel.id">
-              {{ panel.name }}
+            <option v-for="panel in panelsFor(row.provider)" :key="panel.id" :value="panel.referenceId">
+              {{ panel.name }} (ref {{ panel.referenceId }})
             </option>
           </select>
         </label>
@@ -443,10 +476,11 @@ async function submit() {
       <p v-else-if="availableProviders.length === 1" class="muted">
         Only one provider is available for this account — the whole survey limit goes to it.
       </p>
-      <p :class="percentageTotal === 100 ? 'muted' : 'error-text'">Total: {{ percentageTotal }}% (must be 100%)</p>
+      <p v-if="!selectedProviderRows.length" class="muted">No provider selected — defaults are assigned at launch.</p>
+      <p v-else :class="percentageTotal === 100 ? 'muted' : 'error-text'">Total: {{ percentageTotal }}% (must be 100%)</p>
       <div class="row">
         <button class="secondary" @click="step = 3">Back</button>
-        <button :disabled="percentageTotal !== 100" @click="step = 5">Next: Review</button>
+        <button :disabled="!providersValid" @click="step = 5">Next: Review</button>
       </div>
     </div>
 

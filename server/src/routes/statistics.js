@@ -6,13 +6,22 @@ import { Router } from 'express';
  * Statistics (live counters, poll during fieldwork):
  *   {inSurvey, completed, screenOut, qualityTerminate, quotaFull, timedOut,
  *    dropoutRate, incidenceRate, lengthOfInterview, currentCost}
+ *   `dropoutRate`, `incidenceRate` (%) and `lengthOfInterview` (minutes)
+ *   are integers, or null until there is data to compute them.
  *   `currentCost` is the accrued fieldwork cost so far (e.g. "12.5EUR").
  *
  * Feasibility (run BEFORE launching!):
- *   {feasible, estimatedCpi, estimatedCost}
+ *   {feasible, estimatedCpi, estimatedCost,
+ *    pricedProviderCount, totalProviderCount, providers}
  *   feasible      — completes realistically achievable with this targeting
  *   estimatedCpi  — cost per complete (falls with higher IR, rises with LOI)
  *   estimatedCost — projected total for the survey's limit
+ *   pricedProviderCount / totalProviderCount — how many of the providers
+ *                   considered are included in the estimate; when not all
+ *                   are, the estimate may still change
+ *   providers     — per-allocation breakdown keyed by the allocation `id`
+ *                   (not the provider id): {estimatedCpi, estimatedCost,
+ *                   estimatedCompletes}
  */
 export function statisticsRouter(api) {
   const router = Router();

@@ -15,9 +15,9 @@ import { metaRouter } from './routes/meta.js';
  * onto the upstream API:
  *
  *   /api/reference/*                          reference data lookups
- *   /api/samples*                             projects (samples)
+ *   /api/samples*                             projects (samples) + close/archive/restore
  *   /api/samples/:sampleId/subsets*           surveys (subsets) + status/limit
- *   /api/subsets/:subsetId/providers*         provider allocation
+ *   /api/subsets/:subsetId/providers*         provider allocation (add/remove)
  *   /api/subsets/:subsetId/global-quota-groups*  quotas (read)
  *   /api/global-quota-groups/* /global-quotas/*  quotas (read)
  *   /api/responses/* /api/subsets/:id/responses* reconciliation

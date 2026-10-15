@@ -29,10 +29,12 @@ const loaders = {
 };
 watch(tab, (next) => { if (loaders[next] && !loaders[next].data.value) loaders[next].run(); }, { immediate: true });
 
-/* Countries drill-down: GET /reference/countries/{id} lists region types → regions. */
+/* Countries drill-down: GET /reference/countries/{id} lists region types → regions;
+   GET /reference/countries/{id}/languages lists the languages fieldable there. */
 const selectedCountry = ref(null);
 const countryDetail = useAsync(() => api.get(`/reference/countries/${selectedCountry.value}`));
-watch(selectedCountry, (id) => { if (id) countryDetail.run(); });
+const countryLanguages = useAsync(() => api.get(`/reference/countries/${selectedCountry.value}/languages`));
+watch(selectedCountry, (id) => { if (id) { countryDetail.run(); countryLanguages.run(); } });
 
 /* Providers drill-down: countries (with languages) a provider can field in.
    Collection key upstream: `providerCountryLanguages`. */
@@ -79,7 +81,11 @@ const questions = useAsync(() => api.get(`/reference/questions?countryId=${quest
     <div v-if="tab === 'Countries'" class="card">
       <EndpointBadge method="GET" path="/reference/countries" />
       <EndpointBadge method="GET" path="/reference/countries/{id}" />
-      <p class="muted">Click a country to load its regions (→ <code>regionIds</code>).</p>
+      <EndpointBadge method="GET" path="/reference/countries/{id}/languages" />
+      <p class="muted">
+        Click a country to load its languages (→ <code>languageId</code>) and regions
+        (→ <code>regionIds</code>).
+      </p>
       <table v-if="countries.data.value">
         <thead><tr><th>ID</th><th>Name</th><th>ISO</th><th>IR range</th><th>LOI range</th><th>Min age</th></tr></thead>
         <tbody>
@@ -91,6 +97,18 @@ const questions = useAsync(() => api.get(`/reference/questions?countryId=${quest
           </tr>
         </tbody>
       </table>
+      <template v-if="selectedCountry && countryLanguages.data.value">
+        <h3>Languages available in {{ countryDetail.data.value?.name ?? `country ${selectedCountry}` }}</h3>
+        <p class="muted">Only languages at least one provider can field in this country.</p>
+        <table>
+          <thead><tr><th>Language ID</th><th>Name</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr v-for="lang in countryLanguages.data.value.languages" :key="lang.id">
+              <td>{{ lang.id }}</td><td>{{ lang.name }}</td><td>{{ lang.isDefault ? 'yes' : '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
       <template v-if="selectedCountry && countryDetail.data.value">
         <h3>Regions of {{ countryDetail.data.value.name }}</h3>
         <table>
@@ -153,11 +171,17 @@ const questions = useAsync(() => api.get(`/reference/questions?countryId=${quest
         for test accounts the API lists only the test provider — the full marketplace catalog is
         not returned.
       </TestModeDisclaimer>
+      <p class="muted">
+        <code>supportsPanels</code>: the provider has panels;
+        <code>supportsPanelSelection</code>: you may pick specific ones via <code>panelIds</code>.
+      </p>
       <table v-if="providers.data.value">
-        <thead><tr><th>ID</th><th>Name</th></tr></thead>
+        <thead><tr><th>ID</th><th>Name</th><th>Panels</th><th>Panel selection</th></tr></thead>
         <tbody>
           <tr v-for="provider in providers.data.value.providers" :key="provider.id" class="clickable" @click="selectedProvider = provider.id">
             <td>{{ provider.id }}</td><td>{{ provider.name }}</td>
+            <td>{{ provider.supportsPanels ? 'yes' : 'no' }}</td>
+            <td>{{ provider.supportsPanelSelection ? 'yes' : 'no' }}</td>
           </tr>
         </tbody>
       </table>
@@ -188,7 +212,8 @@ const questions = useAsync(() => api.get(`/reference/questions?countryId=${quest
     <div v-if="tab === 'Panels'" class="card">
       <EndpointBadge method="GET" path="/reference/panels?country=…&provider=…" />
       <p class="muted">
-        Panel ids go into a survey provider's <code>panelIds</code>. Both filters are optional.
+        A panel's <strong>Reference ID</strong> (not its ID) goes into a survey provider's
+        <code>panelIds</code>. Both filters are optional.
       </p>
       <TestModeDisclaimer>
         for test accounts the API skips the <code>country</code> and <code>provider</code> filters

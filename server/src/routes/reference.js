@@ -7,7 +7,8 @@ import { Router } from 'express';
  * Where each dataset is used:
  *  - countries  → `countryId` (a single country detail also lists its region
  *                 types and regions → `regionIds` targeting)
- *  - languages  → `languageId`
+ *  - languages  → `languageId` (per country: /reference/countries/{id}/languages
+ *                 lists only languages some provider can field there)
  *  - genders    → `gender` (0 Any · 1 Male · 2 Female)
  *  - statuses   → survey lifecycle status ids/names
  *  - providers  → `providers[].provider` (supply sources; per-provider
@@ -23,6 +24,10 @@ export function referenceRouter(api) {
   // GET /reference/countries/{id} — single country incl. regions per region type
   router.get('/countries/:id', async (req, res) =>
     res.json(await api.get(`/reference/countries/${req.params.id}`)));
+  // GET /reference/countries/{id}/languages — languages available in one
+  // country across providers: {countryId, languages: [{id, name, isDefault}]}
+  router.get('/countries/:countryId/languages', async (req, res) =>
+    res.json(await api.get(`/reference/countries/${req.params.countryId}/languages`)));
 
   router.get('/languages', async (req, res) => res.json(await api.get('/reference/languages')));
   router.get('/languages/:id', async (req, res) =>
@@ -36,6 +41,9 @@ export function referenceRouter(api) {
   router.get('/statuses/:id', async (req, res) =>
     res.json(await api.get(`/reference/statuses/${req.params.id}`)));
 
+  // GET /reference/providers — each provider carries `supportsPanels` /
+  // `supportsPanelSelection`: whether it has panels at all and whether you
+  // may pick specific ones via `panelIds`.
   // Note: TEST accounts receive only the test provider here, not the full
   // marketplace catalog.
   router.get('/providers', async (req, res) => res.json(await api.get('/reference/providers')));
@@ -50,8 +58,10 @@ export function referenceRouter(api) {
       `/reference/providers/${req.params.providerId}/countries/${req.params.countryId}/languages`)));
 
   // GET /reference/panels?country={countryId}&provider={providerId} — both
-  // filters optional. Note: TEST accounts always receive the dedicated test
-  // panel; the filters are ignored upstream for them.
+  // filters optional, positive integers (422 otherwise). A panel's
+  // `referenceId` (not its `id`) is what goes into `providers[].panelIds`.
+  // Note: TEST accounts always receive the dedicated test panel; the filters
+  // are ignored upstream for them.
   router.get('/panels', async (req, res) =>
     res.json(await api.get('/reference/panels', {
       query: { country: req.query.country, provider: req.query.provider },

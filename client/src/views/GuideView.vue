@@ -71,7 +71,9 @@ const constants = useConstants();
           <strong>Create a survey</strong> — <EndpointBadge method="POST" path="/samples/{id}/subsets" />
           with a mandatory <code>Global Quota name</code>, metadata, targeting (<code>countryId</code>, <code>languageId</code>, <code>gender</code>,
           ages, <code>regionIds</code>, <code>profilingIds</code>), quotas and providers.
-          The survey starts in <strong>Draft</strong>.
+          The survey starts in <strong>Draft</strong>. Providers are optional — without them,
+          defaults are assigned at launch. Only possible while the project is active (409 once it is
+          closed or archived).
         </li>
         <li>
           <strong>Check feasibility</strong> — <EndpointBadge method="GET" path="/subsets/{id}/feasibility" />
@@ -98,14 +100,52 @@ const constants = useConstants();
           API rejects any further change (limits, providers, modification, response statuses) with
           <code>409</code>.
         </li>
+        <li>
+          <strong>Close the project</strong> — once all fieldwork is done,
+          <EndpointBadge method="PATCH" path="/samples/{id}/close" /> closes the whole project in
+          one call (see Project lifecycle below), and
+          <EndpointBadge method="PATCH" path="/samples/{id}/archive" /> archives it afterwards.
+        </li>
       </ol>
     </div>
 
     <div class="card">
       <h2 style="margin-top: 0">4 · Project lifecycle</h2>
       <p>
-        Once fieldwork ends, a project (sample) moves through two further states. Each has a
-        dedicated read endpoint that returns only that cohort:
+        Once fieldwork ends, a project (sample) moves through two further states, one step at a
+        time. You drive the transitions with body-less <code>PATCH</code> actions that answer
+        <code>{id, closedAt, archivedAt}</code>:
+      </p>
+      <table>
+        <thead><tr><th>Action</th><th>From → to</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><EndpointBadge method="PATCH" path="/samples/{id}/close" /></td>
+            <td>Active → Closed</td>
+            <td>
+              Every launched survey is closed (final, invoicing starts); every
+              <strong>Draft survey is deleted</strong>.
+            </td>
+          </tr>
+          <tr>
+            <td><EndpointBadge method="PATCH" path="/samples/{id}/archive" /></td>
+            <td>Closed → Archived</td>
+            <td>Statistics are frozen as a snapshot.</td>
+          </tr>
+          <tr>
+            <td><EndpointBadge method="PATCH" path="/samples/{id}/restore" /></td>
+            <td>Archived → Closed, Closed → Active</td>
+            <td>
+              One step back. Surveys stay closed and deleted drafts don't return. Re-activating can
+              be refused if your account already has its maximum of active projects.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Any step not allowed from the current state (e.g. archiving an active project, restoring an
+        active one) is rejected with <code>409 Conflict</code>. Each state has a dedicated read
+        endpoint that returns only that cohort:
       </p>
       <table>
         <thead>
@@ -133,10 +173,11 @@ const constants = useConstants();
       <pre v-pre><code>GET /samples/closed?page=2
 { "samples": [...], "meta": { "total": 42, "page": 2, "perPage": 15, "pages": 3 } }</code></pre>
       <p>
-        <code>PATCH /samples/{id}</code> returns <strong>409 Conflict</strong> for any non-active
-        sample — the API enforces immutability once a project is closed. The
-        <RouterLink to="/">Projects</RouterLink> page demonstrates this live: open a Closed project
-        and submit the edit form to see the rejection.
+        While a project is closed or archived the API rejects with <strong>409 Conflict</strong>:
+        editing it (<code>PATCH /samples/{id}</code>), adding surveys to it, and changing the
+        status or limits of its surveys. The <RouterLink to="/">Projects</RouterLink> page
+        demonstrates this live: open a Closed project and submit the edit form to see the
+        rejection, or use its lifecycle buttons.
       </p>
       <p class="muted">
         The response includes <code>closedAt</code> (closed and archived) and
@@ -236,12 +277,26 @@ const constants = useConstants();
       <p>
         Providers are sample marketplaces differing in country coverage and pricing. Allocate the
         survey limit across them with percentages totalling 100; optionally narrow fieldwork to
-        specific <em>panels</em> (dedicated panelist pools).
+        specific <em>panels</em> (dedicated panelist pools — pass the panels'
+        <code>referenceId</code>s, only for providers with <code>supportsPanelSelection</code>).
+      </p>
+      <p>
+        Manage the allocation of an existing survey with
+        <EndpointBadge method="POST" path="/subsets/{id}/providers" /> (until the survey is Closed;
+        the provider must support the survey's country and language, and <code>percentage</code>
+        falls back to a default share when omitted) and
+        <EndpointBadge method="DELETE" path="/subsets/{id}/providers/{allocationId}" /> (only while
+        Draft; note it takes the allocation's own <code>id</code>, not the provider id). A survey
+        without providers gets defaults assigned when it is launched; at launch, providers that
+        can't field the survey's country/language are skipped automatically.
       </p>
       <p>
         Cost per interview is not fixed: it decreases with a higher incidence rate and increases
         with a longer interview. Estimate before launching with the feasibility endpoint
-        (<code>feasible</code>, <code>estimatedCpi</code>, <code>estimatedCost</code>) and track the
+        (<code>feasible</code>, <code>estimatedCpi</code>, <code>estimatedCost</code>, plus a
+        per-allocation breakdown and <code>pricedProviderCount</code> /
+        <code>totalProviderCount</code> — when not every provider is included yet, the estimate
+        may still change) and track the
         accrued total in <code>statistics.currentCost</code> during fieldwork. For commercial terms
         and provider pricing, contact your Syno International representative.
       </p>

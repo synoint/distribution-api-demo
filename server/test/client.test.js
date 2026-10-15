@@ -36,6 +36,26 @@ describe('DistributionApiClient', () => {
     expect(init.headers['Content-Type']).toBe('application/merge-patch+json');
   });
 
+  it('sends body-less PATCH actions without a request body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { id: 1, closedAt: '2026-10-15 10:00:00' }));
+    await makeClient(fetchImpl).patch('/samples/1/close');
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://api.test/samples/1/close');
+    expect(init.method).toBe('PATCH');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('DELETEs without a body and resolves to null on 204', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const result = await makeClient(fetchImpl).delete('/subsets/1/providers/2');
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://api.test/subsets/1/providers/2');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers['Access-token']).toBe('secret-key');
+    expect(init.body).toBeUndefined();
+    expect(result).toBeNull();
+  });
+
   it('builds query strings, skipping undefined params', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { panels: [] }));
     await makeClient(fetchImpl).get('/reference/panels', { query: { country: 1, x: undefined } });

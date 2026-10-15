@@ -39,18 +39,26 @@ export function surveysRouter(api) {
    *                          custom groups: [{name, globalQuotas: [{name,
    *                          limit, gender, ageFrom, ageTo, regionIds,
    *                          profilingIds}]}]
-   *   providers:    [{provider, percentage, panelIds?, panelistIds?,
-   *                   panelistPoolType?}] — percentages total 100
+   *   providers:    [{provider, percentage, panelIds?}] — percentages total
+   *                   100, each ≤ 100. Optional: send [] (or omit) and no
+   *                   provider is stored now — default providers are
+   *                   assigned automatically when the survey is launched.
+   *                   `panelIds` are panel REFERENCE ids (`referenceId`
+   *                   from /reference/panels), not the panel `id`.
    * }
    * Returns 201; created survey starts in status 1 (Draft). 422 with
-   * violation details on validation failure.
-   * TEST accounts: providers outside the test provider are silently skipped;
-   * if none remain, the API assigns default providers itself.
+   * violation details on validation failure. 409 when the project is closed
+   * or archived — surveys can only be added to an active project.
+   * TEST accounts: providers outside the test provider are silently skipped.
    */
   router.post('/samples/:sampleId/subsets', async (req, res) =>
     res.status(201).json(await api.post(`/samples/${req.params.sampleId}/subsets`, req.body)));
 
-  /** GET /samples/{sampleId}/subsets/{id} — one survey with quotas, providers, statistics. */
+  /**
+   * GET /samples/{sampleId}/subsets/{id} — one survey with quotas, providers,
+   * statistics. Besides everything sent on creation (incl. gender, minAge,
+   * maxAge) it carries a read-only `createdAt`.
+   */
   router.get('/samples/:sampleId/subsets/:subsetId', async (req, res) =>
     res.json(await api.get(`/samples/${req.params.sampleId}/subsets/${req.params.subsetId}`)));
 
@@ -59,6 +67,8 @@ export function surveysRouter(api) {
    * BEFORE launch (while Draft). The payload is a FULL REPLACEMENT for
    * quotas: include an existing quota/group `id` to update it, omit `id` to
    * create a new one, omit the object entirely to DELETE it.
+   * The patch is merged onto the stored survey first and the merged result
+   * is validated, so you may send only the fields you change.
    * A Closed survey can no longer be modified — the API answers 409.
    */
   router.patch('/samples/:sampleId/subsets/:subsetId', async (req, res) =>
@@ -69,6 +79,11 @@ export function surveysRouter(api) {
    * Body: {status} — the API only accepts 3 (Live), 4 (Paused), 6 (Closed),
    * and only along allowed transitions (see SURVEY_STATUS_TRANSITIONS).
    * Setting 3 (Live) on a Draft LAUNCHES fieldwork — real cost!
+   * On launch, providers that don't support the survey's country/language
+   * are skipped automatically; 422 only if NONE of them is compatible.
+   * Going Live is also refused (422) while the survey or project limit is
+   * already reached — raise the limit first.
+   * 409 when the project is closed or archived.
    * We pre-validate the enum locally to demonstrate the rule, then pass
    * through so the upstream API stays authoritative on transitions.
    */
@@ -98,7 +113,8 @@ export function surveysRouter(api) {
    *  - Within each group the quota limits must SUM to the survey limit
    *    (422 "Quota group limit must match subset limit" otherwise).
    *  - After launch the floor is the highest completes already achieved.
-   *  - A Closed survey can no longer be changed — the API answers 409.
+   *  - A Stopped (5) or Closed (6) survey can no longer be changed, and
+   *    neither can any survey of a closed/archived project — 409.
    */
   router.patch('/samples/:sampleId/subsets/:subsetId/limit', async (req, res) =>
     res.json(await api.patch(

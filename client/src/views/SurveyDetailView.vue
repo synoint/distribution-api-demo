@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { api } from '@/api';
 import { useAsync } from '@/composables/useAsync';
 import { useConstants } from '@/composables/useConstants';
@@ -19,6 +20,9 @@ const props = defineProps({
   subsetId: { type: String, required: true },
 });
 const constants = useConstants();
+// Set when opened from a closed/archived project: the API then rejects
+// status and limit changes for every survey of that project (409).
+const projectState = useRoute().query.project;
 
 const TABS = ['Overview', 'Status', 'Quotas', 'Providers', 'Responses', 'Statistics'];
 const tab = ref('Overview');
@@ -31,6 +35,13 @@ onMounted(survey.run);
 // changes on a closed survey, so the UI doesn't offer them.
 const isClosed = computed(
   () => survey.data.value?.status === constants.value?.surveyStatus?.CLOSED,
+);
+// Limits are frozen once the survey is Stopped (5) or Closed (6).
+const limitsLocked = computed(() =>
+  [constants.value?.surveyStatus?.COMPLETE, constants.value?.surveyStatus?.CLOSED]
+    .includes(survey.data.value?.status));
+const isDraft = computed(
+  () => survey.data.value?.status === constants.value?.surveyStatus?.DRAFT,
 );
 
 /* ---------- Status tab ---------- */
@@ -105,6 +116,45 @@ const changeLimit = useAsync(async () => {
 
 /* ---------- Providers tab ---------- */
 const providerAllocation = useAsync(() => api.get(`/subsets/${props.subsetId}/providers`));
+const providerCatalog = useAsync(() => api.get('/reference/providers'));
+const providerName = (id) =>
+  providerCatalog.data.value?.providers?.find((provider) => provider.id === id)?.name ?? `#${id}`;
+// Each provider can be allocated once per survey.
+const addableProviders = computed(() => {
+  const taken = new Set((providerAllocation.data.value?.subsetProviders ?? []).map((a) => a.provider));
+  return (providerCatalog.data.value?.providers ?? []).filter((provider) => !taken.has(provider.id));
+});
+
+/**
+ * POST /subsets/{id}/providers — `percentage` is optional: left empty, the
+ * API applies a default share.
+ */
+const newAllocation = reactive({ provider: null, percentage: '' });
+const addProvider = useAsync(async () => {
+  const body = { provider: Number(newAllocation.provider) };
+  if (newAllocation.percentage !== '') body.percentage = Number(newAllocation.percentage);
+  const created = await api.post(`/subsets/${props.subsetId}/providers`, body);
+  newAllocation.provider = null;
+  newAllocation.percentage = '';
+  await providerAllocation.run();
+  return created;
+});
+
+/**
+ * DELETE /subsets/{id}/providers/{allocationId} — Draft only. Addressed by
+ * the allocation's own `id`, not the provider id.
+ */
+const pendingRemoval = ref(null);
+const removeDialog = ref(null);
+function askRemove(allocation) {
+  pendingRemoval.value = allocation;
+  removeDialog.value.open();
+}
+const removeProvider = useAsync(async () => {
+  await api.delete(`/subsets/${props.subsetId}/providers/${pendingRemoval.value.id}`);
+  await providerAllocation.run();
+  return { removed: pendingRemoval.value };
+});
 
 /* ---------- Responses tab ---------- */
 const responses = useAsync(() => api.get(`/subsets/${props.subsetId}/responses`));
@@ -129,7 +179,10 @@ function openTab(next) {
     newLimit.value ??= survey.data.value?.limit;
     loadAllQuotas();
   }
-  if (next === 'Providers' && !providerAllocation.data.value) providerAllocation.run();
+  if (next === 'Providers' && !providerAllocation.data.value) {
+    providerAllocation.run();
+    providerCatalog.run();
+  }
   if (next === 'Responses' && !responses.data.value) responses.run();
   if (next === 'Statistics') stats.run();
 }
@@ -148,6 +201,11 @@ function openTab(next) {
         <StatusBadge :status="survey.data.value.status" />
       </div>
 
+      <p v-if="projectState" class="warn-banner">
+        The parent project is <strong>{{ projectState }}</strong> — the API rejects status and limit
+        changes for its surveys with <code>409</code>.
+      </p>
+
       <nav class="tabs">
         <button
           v-for="name in TABS"
@@ -163,6 +221,7 @@ function openTab(next) {
         <EndpointBadge method="GET" path="/samples/{sampleId}/subsets/{id}" />
         <dl class="props">
           <dt>Name</dt><dd>{{ survey.data.value.name }}</dd>
+          <dt>Created</dt><dd>{{ survey.data.value.createdAt ?? '—' }}</dd>
           <dt>Limit</dt><dd>{{ survey.data.value.limit }}</dd>
           <dt>Field period</dt><dd>{{ survey.data.value.fieldPeriod }} days</dd>
           <dt>Country</dt><dd>{{ survey.data.value.countryId }}</dd>
@@ -171,6 +230,8 @@ function openTab(next) {
           <dt>IR</dt><dd>{{ survey.data.value.ir }}%</dd>
           <dt>Live URL</dt><dd>{{ survey.data.value.url }}</dd>
           <dt>Test URL</dt><dd>{{ survey.data.value.testUrl }}</dd>
+          <dt>Gender</dt><dd>{{ constants?.genderLabels[survey.data.value.gender] ?? survey.data.value.gender ?? '—' }}</dd>
+          <dt>Age</dt><dd>{{ survey.data.value.minAge ?? 'any' }}–{{ survey.data.value.maxAge ?? 'any' }}</dd>
           <dt>Regions</dt><dd>{{ survey.data.value.regionIds?.join(', ') || 'nationwide' }}</dd>
           <dt>Profiling</dt><dd>{{ survey.data.value.profilingIds?.join(', ') || '—' }}</dd>
         </dl>
@@ -185,7 +246,31 @@ function openTab(next) {
           <dt>Feasible completes</dt><dd>{{ feasibility.data.value.feasible }}</dd>
           <dt>Estimated CPI</dt><dd>{{ feasibility.data.value.estimatedCpi }}</dd>
           <dt>Estimated cost</dt><dd>{{ feasibility.data.value.estimatedCost }}</dd>
+          <template v-if="feasibility.data.value.totalProviderCount">
+            <dt>Priced providers</dt>
+            <dd>
+              {{ feasibility.data.value.pricedProviderCount }} of {{ feasibility.data.value.totalProviderCount }}
+              <span
+                v-if="feasibility.data.value.pricedProviderCount < feasibility.data.value.totalProviderCount"
+                class="muted"
+              >— not all providers are included in the estimate yet, so it may change</span>
+            </dd>
+          </template>
         </dl>
+        <template v-if="Object.keys(feasibility.data.value?.providers ?? {}).length">
+          <p class="muted">Per-allocation breakdown (keyed by allocation id — see the Providers tab):</p>
+          <table>
+            <thead><tr><th>Allocation ID</th><th>Est. completes</th><th>Est. CPI</th><th>Est. cost</th></tr></thead>
+            <tbody>
+              <tr v-for="(estimate, allocationId) in feasibility.data.value.providers" :key="allocationId">
+                <td>{{ allocationId }}</td>
+                <td>{{ estimate.estimatedCompletes }}</td>
+                <td>{{ estimate.estimatedCpi }}</td>
+                <td>{{ estimate.estimatedCost }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
 
         <JsonPreview title="Full survey resource" :value="survey.data.value" />
       </div>
@@ -197,7 +282,9 @@ function openTab(next) {
           Lifecycle: Draft → Live → (Paused ⇄ Live) → Stopped/Closed. A client may only set
           <strong>Live (3)</strong>, <strong>Paused (4)</strong> or <strong>Closed (6)</strong>.
           Halted (7) is set automatically on too-low incidence — resume with Live. Closed is final
-          and starts invoicing.
+          and starts invoicing. On launch, providers that can't field the survey's country/language
+          are skipped automatically (422 only if none can); going Live is also refused while the
+          survey or project limit is already reached.
         </p>
         <p v-if="!statusOptions.length" class="muted">
           No transitions available from the current status.
@@ -246,9 +333,9 @@ function openTab(next) {
           the completes already achieved.
         </p>
 
-        <p v-if="isClosed" class="muted">
-          This survey is <strong>Closed</strong> — limits can no longer be changed (the API rejects
-          the request with 409).
+        <p v-if="limitsLocked" class="muted">
+          This survey is <strong>{{ constants?.surveyStatusLabels[survey.data.value.status] }}</strong>
+          — limits can no longer be changed (the API rejects the request with 409).
         </p>
         <form v-else class="row" @submit.prevent="changeLimit.run">
           <label class="field"><span>Survey limit</span>
@@ -258,7 +345,7 @@ function openTab(next) {
             <span style="font-weight: 600">Apply via PATCH …/limit</span>
           </button>
         </form>
-        <p v-if="!isClosed && !sumsValid" class="error-text">
+        <p v-if="!limitsLocked && !sumsValid" class="error-text">
           Each group's quota limits must sum to the survey limit ({{ newLimit }}).
         </p>
         <p v-if="changeLimit.error.value" class="error-text">{{ changeLimit.error.value.message }}</p>
@@ -283,7 +370,7 @@ function openTab(next) {
                     v-model="quota.limit"
                     type="number"
                     min="1"
-                    :disabled="isClosed"
+                    :disabled="limitsLocked"
                     style="max-width: 6rem"
                   />
                 </td>
@@ -299,23 +386,76 @@ function openTab(next) {
       <!-- Providers -->
       <div v-if="tab === 'Providers'" class="card">
         <EndpointBadge method="GET" path="/subsets/{id}/providers" />
+        <EndpointBadge method="POST" path="/subsets/{id}/providers" />
+        <EndpointBadge method="DELETE" path="/subsets/{id}/providers/{allocationId}" />
+        <p class="muted">
+          Providers can be added until the survey is Closed (on a Live survey a new provider starts
+          fielding right away) but only <strong>removed while it is Draft</strong>. A survey with no
+          providers gets default ones assigned automatically when it is launched.
+        </p>
         <TestModeDisclaimer>
           for test accounts the allocation may differ from what was submitted — non-test providers
-          are skipped on creation and replaced with the test provider's defaults.
+          are skipped on creation.
         </TestModeDisclaimer>
         <p v-if="providerAllocation.loading.value" class="muted">Loading…</p>
         <p v-else-if="providerAllocation.error.value" class="error-text">{{ providerAllocation.error.value.message }}</p>
         <!-- Note the upstream collection key: `subsetProviders` -->
         <table v-else-if="providerAllocation.data.value">
-          <thead><tr><th>Provider</th><th>Percentage</th><th>Panels</th></tr></thead>
+          <thead><tr><th>Allocation ID</th><th>Provider</th><th>Percentage</th><th>Panels</th><th></th></tr></thead>
           <tbody>
+            <tr v-if="!providerAllocation.data.value.subsetProviders?.length">
+              <td colspan="5" class="muted">No providers allocated — defaults will be assigned at launch.</td>
+            </tr>
             <tr v-for="alloc in providerAllocation.data.value.subsetProviders" :key="alloc.id ?? alloc.provider">
-              <td>{{ alloc.provider }}</td>
+              <td>{{ alloc.id }}</td>
+              <td>{{ providerName(alloc.provider) }} <span class="muted">(id {{ alloc.provider }})</span></td>
               <td>{{ alloc.percentage }}%</td>
               <td>{{ alloc.panelIds?.join(', ') || '—' }}</td>
+              <td>
+                <button
+                  class="secondary"
+                  :disabled="!isDraft || removeProvider.loading.value"
+                  :title="isDraft ? undefined : 'Only possible while the survey is Draft (409 otherwise)'"
+                  @click="askRemove(alloc)"
+                >Remove</button>
+              </td>
             </tr>
           </tbody>
         </table>
+        <p v-if="removeProvider.error.value" class="error-text">{{ removeProvider.error.value.message }}</p>
+
+        <form v-if="!isClosed" class="row" style="margin-top: 1rem" @submit.prevent="addProvider.run">
+          <label class="field"><span>Add provider</span>
+            <select v-model="newAllocation.provider" required>
+              <option v-for="provider in addableProviders" :key="provider.id" :value="provider.id">
+                {{ provider.name }} (id {{ provider.id }})
+              </option>
+            </select>
+          </label>
+          <label class="field"><span>Percentage (optional)</span>
+            <input v-model="newAllocation.percentage" type="number" min="1" max="100" placeholder="default" style="max-width: 8rem" />
+          </label>
+          <button :disabled="!newAllocation.provider || addProvider.loading.value">Add via POST</button>
+        </form>
+        <p v-if="!isClosed && providerCatalog.data.value && !addableProviders.length" class="muted">
+          Every available provider is already allocated.
+        </p>
+        <p v-if="addProvider.error.value" class="error-text">{{ addProvider.error.value.message }}</p>
+        <JsonPreview v-if="addProvider.data.value" title="Response from POST …/providers (201)" :value="addProvider.data.value" />
+
+        <ConfirmDialog
+          ref="removeDialog"
+          title="Remove this provider?"
+          confirm-label="Yes, remove"
+          danger
+          @confirm="removeProvider.run"
+        >
+          <p v-if="pendingRemoval">
+            Removes allocation <strong>#{{ pendingRemoval.id }}</strong>
+            ({{ providerName(pendingRemoval.provider) }}, {{ pendingRemoval.percentage }}%) from this
+            survey. Remaining percentages are not rebalanced automatically.
+          </p>
+        </ConfirmDialog>
         <JsonPreview v-if="providerAllocation.data.value" title="Raw response" :value="providerAllocation.data.value" />
       </div>
 
@@ -372,6 +512,13 @@ function openTab(next) {
 </template>
 
 <style scoped>
+.warn-banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.92rem;
+}
 .tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1rem 0; }
 .tabs button.active { background: var(--accent); color: #fff; }
 </style>
