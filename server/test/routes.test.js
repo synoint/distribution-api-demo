@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
-import { appWith } from './helpers.js';
+import { DistributionApiError } from '../src/distribution/client.js';
+import { appWith, stubApi } from './helpers.js';
 
 describe('reference routes', () => {
   it('proxies collection and single-item lookups', async () => {
@@ -13,6 +14,9 @@ describe('reference routes', () => {
 
     await request(app).get('/api/reference/providers/3/countries/1/languages').expect(200);
     expect(api.get).toHaveBeenLastCalledWith('/reference/providers/3/countries/1/languages');
+
+    await request(app).get('/api/reference/countries/7/languages').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/reference/countries/7/languages');
   });
 
   it('forwards query params for panels and questions', async () => {
@@ -22,6 +26,7 @@ describe('reference routes', () => {
 
     await request(app).get('/api/reference/questions?countryId=2').expect(200);
     expect(api.get).toHaveBeenLastCalledWith('/reference/questions', { query: { countryId: '2' } });
+
   });
 });
 
@@ -43,6 +48,24 @@ describe('project (sample) routes', () => {
 
     await request(app).get('/api/samples/6017/statistics').expect(200);
     expect(api.get).toHaveBeenLastCalledWith('/samples/6017/statistics');
+  });
+});
+
+describe('project lifecycle action routes', () => {
+  it.each(['close', 'archive', 'restore'])('proxies PATCH /samples/{id}/%s without a body', async (action) => {
+    const { app, api } = appWith();
+    await request(app).patch(`/api/samples/6017/${action}`).expect(200);
+    expect(api.patch).toHaveBeenLastCalledWith(`/samples/6017/${action}`);
+  });
+
+  it('passes an upstream 409 through unchanged', async () => {
+    const problem = { status: 409, detail: 'Sample "X" must be closed before it can be archived.' };
+    const { app } = appWith(stubApi({
+      patch: vi.fn().mockRejectedValue(new DistributionApiError(409, problem)),
+    }));
+    const res = await request(app).patch('/api/samples/6017/archive');
+    expect(res.status).toBe(409);
+    expect(res.body.detail).toBe(problem.detail);
   });
 });
 
@@ -112,6 +135,13 @@ describe('survey provider routes', () => {
 
     await request(app).get('/api/subsets/151/providers/3').expect(200);
     expect(api.get).toHaveBeenLastCalledWith('/subsets/151/providers/3');
+  });
+
+  it('removes an allocation by its id and answers 204', async () => {
+    const { app, api } = appWith();
+    const res = await request(app).delete('/api/subsets/151/providers/88').expect(204);
+    expect(res.text).toBe('');
+    expect(api.delete).toHaveBeenLastCalledWith('/subsets/151/providers/88');
   });
 });
 

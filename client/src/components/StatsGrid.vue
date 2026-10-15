@@ -25,7 +25,8 @@ const FIELDS = [
 
 const tiles = computed(() =>
   FIELDS.filter(([key]) => key in props.stats)
-    .map(([key, label]) => ({ key, label, value: props.stats[key] === '' ? '—' : props.stats[key] })),
+    // Rates and LOI are empty until there is data to compute them.
+    .map(([key, label]) => ({ key, label, value: (props.stats[key] ?? '') === '' ? '—' : props.stats[key] })),
 );
 </script>
 

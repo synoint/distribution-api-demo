@@ -7,6 +7,7 @@ export function stubApi(overrides = {}) {
     get: vi.fn().mockResolvedValue({ stub: 'get' }),
     post: vi.fn().mockResolvedValue({ stub: 'post' }),
     patch: vi.fn().mockResolvedValue({ stub: 'patch' }),
+    delete: vi.fn().mockResolvedValue(null),
     ...overrides,
   };
 }

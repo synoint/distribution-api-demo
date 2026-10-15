@@ -52,9 +52,17 @@ export class DistributionApiClient {
     return this.#request('POST', path, { body, contentType: 'application/json' });
   }
 
-  /** PATCH partially updates a resource (JSON Merge Patch, RFC 7396). */
+  /**
+   * PATCH partially updates a resource (JSON Merge Patch, RFC 7396). Action
+   * endpoints (e.g. …/close) take no body — call patch(path) without one.
+   */
   patch(path, body) {
     return this.#request('PATCH', path, { body, contentType: 'application/merge-patch+json' });
+  }
+
+  /** DELETE removes a resource; expect 204 No Content (resolves to null). */
+  delete(path) {
+    return this.#request('DELETE', path);
   }
 
   async #request(method, path, { query, body, contentType } = {}) {

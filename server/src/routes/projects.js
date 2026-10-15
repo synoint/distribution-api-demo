@@ -40,8 +40,7 @@ export function projectsRouter(api) {
    * GET /samples/archived[?page=N] — fully archived historical projects.
    * Response: {samples: [{id, name, limit, createdAt, closedAt, archivedAt, statistics}],
    *            meta: {total, page, perPage, pages}}
-   * Paginated: 15 per page. Statistics come from archived snapshots (target_group_archive
-   * JSON), not live queries — values are frozen at archive time.
+   * Paginated: 15 per page. Statistics are frozen at archive time, not live.
    */
   router.get('/samples/archived', async (req, res) =>
     res.json(await api.get('/samples/archived', { query: { page: req.query.page } })));
@@ -62,6 +61,32 @@ export function projectsRouter(api) {
    */
   router.patch('/samples/:sampleId', async (req, res) =>
     res.json(await api.patch(`/samples/${req.params.sampleId}`, req.body)));
+
+  /**
+   * Project lifecycle actions — Active → Closed → Archived, and back via
+   * restore. All three are body-less PATCHes answering 200 with
+   * {id, closedAt, archivedAt} (timestamps "Y-m-d H:i:s" or null);
+   * 404 for an unknown sample, 409 when the transition is not allowed.
+   *
+   * PATCH /samples/{id}/close — only from Active (409 otherwise). Cascades
+   * to the surveys: every launched survey is closed (final, invoicing
+   * starts) and every Draft survey is DELETED.
+   */
+  router.patch('/samples/:sampleId/close', async (req, res) =>
+    res.json(await api.patch(`/samples/${req.params.sampleId}/close`)));
+
+  /** PATCH /samples/{id}/archive — only from Closed (409 otherwise). */
+  router.patch('/samples/:sampleId/archive', async (req, res) =>
+    res.json(await api.patch(`/samples/${req.params.sampleId}/archive`)));
+
+  /**
+   * PATCH /samples/{id}/restore — one step back: Archived → Closed, or
+   * Closed → Active. 409 when already Active, or when re-activating would
+   * exceed your account's limit of active projects. Restoring does NOT
+   * re-open closed surveys or bring back deleted drafts.
+   */
+  router.patch('/samples/:sampleId/restore', async (req, res) =>
+    res.json(await api.patch(`/samples/${req.params.sampleId}/restore`)));
 
   /**
    * GET /samples/{id}/statistics — live counters for the whole project:
