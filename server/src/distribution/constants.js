@@ -160,3 +160,19 @@ export const PANELIST_REDIRECTS = {
  * the GUID on survey entry — it is required later for reconciliation.
  */
 export const SURVEY_URL_ID_PLACEHOLDER = '[ID]';
+
+/**
+ * Repricing statuses (GET /subsets/{id}/repricings[?status=]). Only a
+ * PENDING repricing can be accepted or declined; SUPERSEDED means a newer
+ * price replaced it before a decision was made.
+ */
+export const REPRICING_STATUSES = ['pending', 'accepted', 'declined', 'superseded'];
+
+/**
+ * Why a launched provider stopped collecting — the read-only `statusReason`
+ * on each subset provider (null when it is collecting normally).
+ */
+export const PROVIDER_STATUS_REASON_LABELS = {
+  repricing_pending: 'New price awaits your decision',
+  low_quality: 'Halted for low quality',
+};

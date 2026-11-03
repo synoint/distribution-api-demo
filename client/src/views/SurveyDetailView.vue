@@ -24,12 +24,13 @@ const constants = useConstants();
 // status and limit changes for every survey of that project (409).
 const projectState = useRoute().query.project;
 
-const TABS = ['Overview', 'Status', 'Quotas', 'Providers', 'Responses', 'Statistics'];
+const TABS = ['Overview', 'Status', 'Quotas', 'Providers', 'Repricing', 'Responses', 'Statistics'];
 const tab = ref('Overview');
 
 const survey = useAsync(() => api.get(`/samples/${props.sampleId}/subsets/${props.subsetId}`));
 const feasibility = useAsync(() => api.get(`/subsets/${props.subsetId}/feasibility`));
-onMounted(survey.run);
+// The provider catalog names providers in the repricing banner and tables.
+onMounted(() => { survey.run(); providerCatalog.run(); });
 
 // Closed is final: the API rejects limit, provider and response-status
 // changes on a closed survey, so the UI doesn't offer them.
@@ -156,6 +157,41 @@ const removeProvider = useAsync(async () => {
   return { removed: pendingRemoval.value };
 });
 
+/* ---------- Repricing tab ---------- */
+// Every provider on the survey resource carries a read-only
+// `pendingRepricing` ({id, currentCpi, newCpi, createdAt} or null) — enough
+// to flag a waiting decision without calling the repricings endpoint.
+const pendingProviders = computed(() =>
+  (survey.data.value?.providers ?? []).filter((provider) => provider.pendingRepricing));
+
+const repricingFilter = ref('');
+const repricings = useAsync(() => api.get(
+  `/subsets/${props.subsetId}/repricings${repricingFilter.value ? `?status=${repricingFilter.value}` : ''}`,
+));
+
+/**
+ * PATCH /subsets/{id}/repricings/{repricingId}/accept|decline — body-less.
+ * Only a `pending` repricing can be decided (409 otherwise, also once the
+ * survey is Closed). The provider's status and the survey's status are
+ * re-derived upstream, so reload everything that shows them.
+ */
+const pendingDecision = ref(null); // {repricing, action: 'accept' | 'decline'}
+const decisionDialog = ref(null);
+function askDecision(repricing, action) {
+  pendingDecision.value = { repricing, action };
+  decisionDialog.value.open();
+}
+const decide = useAsync(async () => {
+  const { repricing, action } = pendingDecision.value;
+  const result = await api.patch(`/subsets/${props.subsetId}/repricings/${repricing.id}/${action}`);
+  await Promise.all([
+    repricings.run(),
+    survey.run(),
+    providerAllocation.data.value ? providerAllocation.run() : null,
+  ]);
+  return result;
+});
+
 /* ---------- Responses tab ---------- */
 const responses = useAsync(() => api.get(`/subsets/${props.subsetId}/responses`));
 const reconcileError = ref(null);
@@ -181,8 +217,8 @@ function openTab(next) {
   }
   if (next === 'Providers' && !providerAllocation.data.value) {
     providerAllocation.run();
-    providerCatalog.run();
   }
+  if (next === 'Repricing') repricings.run();
   if (next === 'Responses' && !responses.data.value) responses.run();
   if (next === 'Statistics') stats.run();
 }
@@ -204,6 +240,13 @@ function openTab(next) {
       <p v-if="projectState" class="warn-banner">
         The parent project is <strong>{{ projectState }}</strong> — the API rejects status and limit
         changes for its surveys with <code>409</code>.
+      </p>
+
+      <p v-if="pendingProviders.length" class="warn-banner">
+        <strong>{{ pendingProviders.length }} provider{{ pendingProviders.length > 1 ? 's' : '' }}
+        stopped collecting</strong> — a new price awaits your decision
+        ({{ pendingProviders.map((p) => providerName(p.provider)).join(', ') }}).
+        <a href="#" @click.prevent="openTab('Repricing')">Review in the Repricing tab →</a>
       </p>
 
       <nav class="tabs">
@@ -389,6 +432,8 @@ function openTab(next) {
         <EndpointBadge method="POST" path="/subsets/{id}/providers" />
         <EndpointBadge method="DELETE" path="/subsets/{id}/providers/{allocationId}" />
         <p class="muted">
+          <code>status</code>, <code>statusReason</code> and <code>pendingRepricing</code> are
+          read-only: they show what each launched provider is doing (empty before launch).
           Providers can be added until the survey is Closed (on a Live survey a new provider starts
           fielding right away) but only <strong>removed while it is Draft</strong>. A survey with no
           providers gets default ones assigned automatically when it is launched.
@@ -401,16 +446,31 @@ function openTab(next) {
         <p v-else-if="providerAllocation.error.value" class="error-text">{{ providerAllocation.error.value.message }}</p>
         <!-- Note the upstream collection key: `subsetProviders` -->
         <table v-else-if="providerAllocation.data.value">
-          <thead><tr><th>Allocation ID</th><th>Provider</th><th>Percentage</th><th>Panels</th><th></th></tr></thead>
+          <thead><tr><th>Allocation ID</th><th>Provider</th><th>Percentage</th><th>Panels</th><th>Status</th><th>Reason</th><th></th></tr></thead>
           <tbody>
             <tr v-if="!providerAllocation.data.value.subsetProviders?.length">
-              <td colspan="5" class="muted">No providers allocated — defaults will be assigned at launch.</td>
+              <td colspan="7" class="muted">No providers allocated — defaults will be assigned at launch.</td>
             </tr>
             <tr v-for="alloc in providerAllocation.data.value.subsetProviders" :key="alloc.id ?? alloc.provider">
               <td>{{ alloc.id }}</td>
               <td>{{ providerName(alloc.provider) }} <span class="muted">(id {{ alloc.provider }})</span></td>
               <td>{{ alloc.percentage }}%</td>
               <td>{{ alloc.panelIds?.join(', ') || '—' }}</td>
+              <td>
+                <StatusBadge v-if="alloc.status != null" :status="alloc.status" />
+                <span v-else class="muted" title="Set once the survey is launched">—</span>
+              </td>
+              <td>
+                <a
+                  v-if="alloc.statusReason === 'repricing_pending'"
+                  href="#"
+                  @click.prevent="openTab('Repricing')"
+                >{{ constants?.providerStatusReasonLabels[alloc.statusReason] }}</a>
+                <span v-else-if="alloc.statusReason">
+                  {{ constants?.providerStatusReasonLabels[alloc.statusReason] ?? alloc.statusReason }}
+                </span>
+                <span v-else class="muted">—</span>
+              </td>
               <td>
                 <button
                   class="secondary"
@@ -457,6 +517,103 @@ function openTab(next) {
           </p>
         </ConfirmDialog>
         <JsonPreview v-if="providerAllocation.data.value" title="Raw response" :value="providerAllocation.data.value" />
+      </div>
+
+      <!-- Repricing -->
+      <div v-if="tab === 'Repricing'" class="card">
+        <EndpointBadge method="GET" path="/subsets/{id}/repricings" />
+        <EndpointBadge method="PATCH" path="/subsets/{id}/repricings/{repricingId}/accept" />
+        <EndpointBadge method="PATCH" path="/subsets/{id}/repricings/{repricingId}/decline" />
+        <p class="muted">
+          As completes come in, Syno re-evaluates each launched provider's CPI from the survey's
+          actual LOI and incidence rate. When the price rises, that provider
+          <strong>stops collecting</strong> (status Halted, reason <code>repricing_pending</code>)
+          until you decide: <strong>accept</strong> and it resumes at the new CPI, or
+          <strong>decline</strong> and it stops for good. Other providers keep collecting; the
+          survey pauses only if the repriced provider was the last one collecting. Only a
+          <code>pending</code> repricing can be decided — a newer price <em>supersedes</em> it, and
+          closing the survey declines it (both answer <code>409</code> afterwards).
+        </p>
+
+        <div class="spread">
+          <label class="field"><span>Status filter (<code>?status=</code>)</span>
+            <select v-model="repricingFilter" @change="repricings.run">
+              <option value="">all</option>
+              <option v-for="status in constants?.repricingStatuses ?? []" :key="status" :value="status">
+                {{ status }}
+              </option>
+            </select>
+          </label>
+          <button class="secondary" :disabled="repricings.loading.value" @click="repricings.run">Refresh</button>
+        </div>
+
+        <p v-if="repricings.loading.value" class="muted">Loading…</p>
+        <p v-else-if="repricings.error.value" class="error-text">{{ repricings.error.value.message }}</p>
+        <p v-else-if="repricings.data.value && !repricings.data.value.repricings?.length" class="muted">
+          No repricings{{ repricingFilter ? ` with status “${repricingFilter}”` : '' }} — prices change
+          only for launched providers, once completes come in.
+        </p>
+        <table v-else-if="repricings.data.value">
+          <thead>
+            <tr>
+              <th>ID</th><th>Provider</th><th>Allocation ID</th><th>Current CPI</th><th>New CPI</th>
+              <th>Status</th><th>Created</th><th>Resolved</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="repricing in repricings.data.value.repricings" :key="repricing.id">
+              <td>{{ repricing.id }}</td>
+              <td>{{ providerName(repricing.provider) }} <span class="muted">(id {{ repricing.provider }})</span></td>
+              <td>{{ repricing.subsetProviderId ?? '—' }}</td>
+              <td>{{ repricing.currentCpi ?? '—' }}</td>
+              <td><strong>{{ repricing.newCpi }}</strong></td>
+              <td><StatusBadge :status="repricing.status" kind="repricing" /></td>
+              <td>{{ repricing.createdAt }}</td>
+              <td>{{ repricing.resolvedAt ?? '—' }}</td>
+              <td>
+                <div v-if="repricing.status === 'pending'" class="row" style="flex-wrap: nowrap">
+                  <button
+                    :disabled="isClosed || decide.loading.value"
+                    :title="isClosed ? 'A Closed survey can no longer decide (409)' : undefined"
+                    @click="askDecision(repricing, 'accept')"
+                  >Accept</button>
+                  <button
+                    class="secondary"
+                    :disabled="isClosed || decide.loading.value"
+                    :title="isClosed ? 'A Closed survey can no longer decide (409)' : undefined"
+                    @click="askDecision(repricing, 'decline')"
+                  >Decline</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-if="decide.error.value" class="error-text">{{ decide.error.value.message }}</p>
+        <JsonPreview
+          v-if="decide.data.value"
+          title="Response from PATCH …/repricings/{id}/accept|decline"
+          :value="decide.data.value"
+        />
+
+        <ConfirmDialog
+          ref="decisionDialog"
+          :title="pendingDecision?.action === 'accept' ? 'Accept the new price?' : 'Decline the new price?'"
+          :confirm-label="pendingDecision?.action === 'accept' ? 'Yes, accept' : 'Yes, decline'"
+          danger
+          @confirm="decide.run"
+        >
+          <p v-if="pendingDecision?.action === 'accept'">
+            <strong>{{ providerName(pendingDecision.repricing.provider) }} resumes collecting at
+            CPI {{ pendingDecision.repricing.newCpi }}</strong>
+            (currently {{ pendingDecision.repricing.currentCpi ?? '—' }}). Every further complete from
+            this provider is billed at the new price.
+          </p>
+          <p v-else-if="pendingDecision">
+            <strong>{{ providerName(pendingDecision.repricing.provider) }} stops collecting for
+            good</strong> on this survey. This cannot be undone; other providers are not affected.
+          </p>
+        </ConfirmDialog>
+        <JsonPreview v-if="repricings.data.value" title="Raw response" :value="repricings.data.value" />
       </div>
 
       <!-- Responses -->

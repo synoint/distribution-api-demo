@@ -4,6 +4,7 @@ import { referenceRouter } from './routes/reference.js';
 import { projectsRouter } from './routes/projects.js';
 import { surveysRouter } from './routes/surveys.js';
 import { providersRouter } from './routes/providers.js';
+import { repricingsRouter } from './routes/repricings.js';
 import { quotasRouter } from './routes/quotas.js';
 import { responsesRouter } from './routes/responses.js';
 import { statisticsRouter } from './routes/statistics.js';
@@ -18,6 +19,7 @@ import { metaRouter } from './routes/meta.js';
  *   /api/samples*                             projects (samples) + close/archive/restore
  *   /api/samples/:sampleId/subsets*           surveys (subsets) + status/limit
  *   /api/subsets/:subsetId/providers*         provider allocation (add/remove)
+ *   /api/subsets/:subsetId/repricings*        provider repricing (accept/decline)
  *   /api/subsets/:subsetId/global-quota-groups*  quotas (read)
  *   /api/global-quota-groups/* /global-quotas/*  quotas (read)
  *   /api/responses/* /api/subsets/:id/responses* reconciliation
@@ -38,6 +40,7 @@ export function createApp({ api } = {}) {
   app.use('/api', projectsRouter(api));
   app.use('/api', surveysRouter(api));
   app.use('/api', providersRouter(api));
+  app.use('/api', repricingsRouter(api));
   app.use('/api', quotasRouter(api));
   app.use('/api', responsesRouter(api));
   app.use('/api', statisticsRouter(api));

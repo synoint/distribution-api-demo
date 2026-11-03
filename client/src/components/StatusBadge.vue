@@ -2,15 +2,16 @@
 import { computed } from 'vue';
 import { useConstants } from '@/composables/useConstants';
 
-/** Colored label for a survey or response status id. */
+/** Colored label for a survey/response status id or a repricing status. */
 const props = defineProps({
-  status: { type: Number, required: true },
-  kind: { type: String, default: 'survey' }, // 'survey' | 'response'
+  status: { type: [Number, String], required: true },
+  kind: { type: String, default: 'survey' }, // 'survey' | 'response' | 'repricing'
 });
 
 const constants = useConstants();
 
 const label = computed(() => {
+  if (props.kind === 'repricing') return props.status;
   const labels = props.kind === 'response'
     ? constants.value?.responseStatusLabels
     : constants.value?.surveyStatusLabels;
@@ -18,6 +19,9 @@ const label = computed(() => {
 });
 
 const tone = computed(() => {
+  if (props.kind === 'repricing') {
+    return { pending: 'warn', accepted: 'ok', declined: 'danger' }[props.status] ?? 'neutral';
+  }
   if (props.kind === 'response') {
     return { 5: 'ok', 2: 'warn', 3: 'warn', 11: 'warn', 4: 'danger', 6: 'danger' }[props.status] ?? 'neutral';
   }

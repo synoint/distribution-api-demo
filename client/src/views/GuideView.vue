@@ -88,7 +88,8 @@ const constants = useConstants();
           <strong>Monitor</strong> — poll <EndpointBadge method="GET" path="/subsets/{id}/statistics" />
           and <EndpointBadge method="GET" path="/subsets/{id}/responses" />; adjust limits via
           <EndpointBadge method="PATCH" path="…/subsets/{id}/limit" /> (allowed after launch; the
-          floor is the completes already achieved).
+          floor is the completes already achieved). If a provider's price rises during fieldwork it
+          stops collecting until you accept or decline the new price (see Repricing below).
         </li>
         <li>
           <strong>Reconcile</strong> — correct response statuses via
@@ -299,6 +300,27 @@ const constants = useConstants();
         may still change) and track the
         accrued total in <code>statistics.currentCost</code> during fieldwork. For commercial terms
         and provider pricing, contact your Syno International representative.
+      </p>
+      <h3>Repricing</h3>
+      <p>
+        During fieldwork the CPI of a launched provider is re-evaluated from the survey's actual
+        LOI and incidence rate. When it rises, that provider <strong>stops collecting</strong> —
+        its read-only <code>status</code> becomes Halted, <code>statusReason</code> is
+        <code>repricing_pending</code> and <code>pendingRepricing</code> carries
+        <code>{id, currentCpi, newCpi, createdAt}</code> (visible in
+        <EndpointBadge method="GET" path="/subsets/{id}/providers" /> and on the survey). Other
+        providers keep collecting; the survey pauses only if it was the last one collecting.
+      </p>
+      <p>
+        List the history with <EndpointBadge method="GET" path="/subsets/{id}/repricings" />
+        (newest first, optional <code>?status=pending|accepted|declined|superseded</code>), then
+        decide with the body-less
+        <EndpointBadge method="PATCH" path="/subsets/{id}/repricings/{repricingId}/accept" /> (the
+        provider resumes at the new CPI) or
+        <EndpointBadge method="PATCH" path="/subsets/{id}/repricings/{repricingId}/decline" /> (it
+        stops for good). Only the pending repricing can be decided: one already decided, replaced
+        by a newer price (<em>superseded</em>) or on a Closed survey answers <code>409</code>.
+        Closing the survey declines any pending repricing.
       </p>
     </div>
 
