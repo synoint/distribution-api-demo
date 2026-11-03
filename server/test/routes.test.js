@@ -145,6 +145,42 @@ describe('survey provider routes', () => {
   });
 });
 
+describe('repricing routes', () => {
+  it('lists repricings and forwards a valid status filter', async () => {
+    const { app, api } = appWith();
+
+    await request(app).get('/api/subsets/151/repricings').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/subsets/151/repricings', { query: { status: undefined } });
+
+    await request(app).get('/api/subsets/151/repricings?status=pending').expect(200);
+    expect(api.get).toHaveBeenLastCalledWith('/subsets/151/repricings', { query: { status: 'pending' } });
+  });
+
+  it('rejects an unknown status filter locally', async () => {
+    const { app, api } = appWith();
+    const res = await request(app).get('/api/subsets/151/repricings?status=open');
+    expect(res.status).toBe(400);
+    expect(res.body.detail).toContain('pending, accepted, declined, superseded');
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it.each(['accept', 'decline'])('proxies PATCH /subsets/{id}/repricings/{rid}/%s without a body', async (action) => {
+    const { app, api } = appWith();
+    await request(app).patch(`/api/subsets/151/repricings/12/${action}`).expect(200);
+    expect(api.patch).toHaveBeenLastCalledWith(`/subsets/151/repricings/12/${action}`);
+  });
+
+  it('passes an upstream 409 (no longer pending) through unchanged', async () => {
+    const problem = { status: 409, detail: 'Repricing event was superseded by a newer price.' };
+    const { app } = appWith(stubApi({
+      patch: vi.fn().mockRejectedValue(new DistributionApiError(409, problem)),
+    }));
+    const res = await request(app).patch('/api/subsets/151/repricings/12/accept');
+    expect(res.status).toBe(409);
+    expect(res.body.detail).toBe(problem.detail);
+  });
+});
+
 describe('quota routes', () => {
   it('reads groups, quotas and quota statistics', async () => {
     const { app, api } = appWith();

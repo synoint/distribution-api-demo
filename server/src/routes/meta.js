@@ -20,6 +20,8 @@ export function metaRouter() {
       responseStatusLabels: constants.RESPONSE_STATUS_LABELS,
       settableResponseStatuses: constants.SETTABLE_RESPONSE_STATUSES,
       providers: constants.PROVIDERS,
+      repricingStatuses: constants.REPRICING_STATUSES,
+      providerStatusReasonLabels: constants.PROVIDER_STATUS_REASON_LABELS,
       gender: constants.GENDER,
       genderLabels: constants.GENDER_LABELS,
       panelistRedirects: constants.PANELIST_REDIRECTS,
